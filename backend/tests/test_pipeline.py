@@ -13,22 +13,29 @@ from app.routes import factcheck
 
 async def test_pipeline_full():
     """Test the full pipeline with mocked search."""
-    # Mock search to return fake results
+    # Tavily-style results: content field holds clean page extracts
     mock_search_results = [
         {
             "title": "NASA - Earth Age",
             "url": "https://nasa.gov/earth-age",
-            "snippet": "The Earth is approximately 4.5 billion years old based on radiometric dating."
+            "snippet": (
+                "The Earth is approximately 4.5 billion years old. "
+                "This age is determined through radiometric dating of rocks and meteorites. "
+                "Scientists have confirmed this estimate using multiple independent methods."
+            ),
         },
         {
             "title": "USGS - Earth History",
             "url": "https://usgs.gov/earth",
-            "snippet": "Scientists estimate the age of Earth to be 4.54 billion years."
-        }
+            "snippet": (
+                "Scientists estimate the age of Earth to be 4.54 billion years. "
+                "Uranium-lead dating of ancient zircon crystals provides the most precise measurements. "
+                "The oldest known rocks on Earth date back around 4 billion years."
+            ),
+        },
     ]
 
-    async def mock_search(query, count=5):
-        """Mock search function."""
+    async def mock_search(query, count=5, original_text=""):
         return mock_search_results
 
     # Load models
@@ -41,32 +48,29 @@ async def test_pipeline_full():
     test_text = "The Earth is 4.5 billion years old."
     factcheck._sessions["test-session"] = {
         "text": test_text,
-        "timestamp": time.time()  # Fresh session
+        "timestamp": time.time(),
     }
 
-    # Mock the search function
     with patch("app.routes.factcheck.searcher.search", side_effect=mock_search):
-        # Run the generator
         events = []
         async for event_data in factcheck._factcheck_generator("test-session"):
             events.append(event_data)
 
-    # Verify we got events
+    # Verify event structure
     assert len(events) > 0
 
-    # Parse events
     event_names = [e["event"] for e in events]
     assert "claims_found" in event_names
     assert "claim_result" in event_names
     assert "done" in event_names
 
-    # Check claims_found event
+    # Check claims_found
     claims_event = next(e for e in events if e["event"] == "claims_found")
     claims_data = json.loads(claims_event["data"])
     assert claims_data["total"] >= 1
     assert len(claims_data["claims"]) >= 1
 
-    # Check claim_result event
+    # Check claim_result
     claim_results = [e for e in events if e["event"] == "claim_result"]
     assert len(claim_results) >= 1
 
@@ -86,6 +90,7 @@ async def test_pipeline_full():
     assert "url" in first_source
     assert "snippet" in first_source
     assert "nli_verdict" in first_source
+    assert first_source["nli_verdict"] in ["supports", "contradicts", "neutral"]
     assert "nli_score" in first_source
 
     print("✓ Full pipeline test passed!")

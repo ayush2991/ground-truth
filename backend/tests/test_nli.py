@@ -56,8 +56,32 @@ def test_nli_neutral():
     print(f"✓ Neutral test passed: {scores}")
 
 
+def test_nli_with_ranked_sentences():
+    """
+    Test NLI with the kind of focused evidence that ranker.top_sentences produces —
+    a direct, claim-relevant excerpt rather than a meta-description.
+    """
+    nli.load()
+
+    # Simulate what ranker would return for a Tavily page extract
+    premise = (
+        "Project Hail Mary earned a perfect 100% on Rotten Tomatoes, "
+        "becoming one of the best-reviewed science fiction films of 2026. "
+        "The film received universal acclaim from critics worldwide."
+    )
+    hypothesis = "Project Hail Mary has a 100% rating on Rotten Tomatoes."
+
+    scores = nli.score(premise, hypothesis)
+
+    assert scores["supports"] > scores["contradicts"], (
+        f"Expected supports > contradicts, got: {scores}"
+    )
+    print(f"✓ Ranked-sentence NLI test passed: {scores}")
+
+
 if __name__ == "__main__":
     test_nli_supports()
     test_nli_contradicts()
     test_nli_neutral()
+    test_nli_with_ranked_sentences()
     print("\n✓ All NLI tests passed!")

@@ -58,7 +58,34 @@ def test_extractor_complex():
         print(f"  {i}. {claim}")
 
 
+def test_extractor_compound_sentences():
+    """Regression test: compound sentences must produce multiple claims, not one."""
+    extractor.load()
+
+    text = (
+        "Gemini 3 is the best LLM model, often outperforming GPT 5 by 20%. \n"
+        " Gemini also outperforms almost every known anthropic model."
+    )
+
+    claims = extractor.extract(text)
+
+    # Must split into at least 2 distinct claims (not merge into one string)
+    assert len(claims) >= 2, f"Expected >= 2 claims, got {len(claims)}: {claims}"
+
+    # No single claim should contain two separate factual assertions joined by a period
+    for claim in claims:
+        sentences = [s.strip() for s in claim.split(".") if s.strip()]
+        assert len(sentences) <= 1, (
+            f"Claim appears to contain multiple sentences: {claim!r}"
+        )
+
+    print(f"\n✓ Extracted {len(claims)} claims from compound sentence input:")
+    for i, claim in enumerate(claims, 1):
+        print(f"  {i}. {claim}")
+
+
 if __name__ == "__main__":
     test_extractor_simple()
     test_extractor_complex()
+    test_extractor_compound_sentences()
     print("\n✓ All extractor tests passed!")

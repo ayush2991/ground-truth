@@ -5,7 +5,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from sse_starlette.sse import EventSourceResponse
 from app.models import SubmitTextRequest, SessionResponse, Source, ClaimResult
-from app.pipeline import extractor, searcher, nli, aggregator
+from app.pipeline import extractor, searcher, nli, aggregator, ranker
 
 router = APIRouter()
 
@@ -62,23 +62,25 @@ async def _factcheck_generator(session_id: str):
         # Stage 2-4: For each claim, search → NLI → aggregate → yield result
         for claim_idx, claim in enumerate(claims):
             try:
-                # Search for evidence
-                search_results = await searcher.search(claim, count=5)
+                # Search for evidence (pass original text for pronoun resolution)
+                search_results = await searcher.search(claim, count=5, original_text=text)
 
                 # Score each result with NLI
                 nli_scores = []
                 sources = []
 
                 for result in search_results:
-                    # Score premise (search snippet) vs hypothesis (claim)
+                    # Extract the most claim-relevant sentences from Tavily's page content
+                    premise = ranker.top_sentences(result["snippet"], claim, k=3)
+
+                    # Score premise vs hypothesis (claim)
                     scores = await asyncio.to_thread(
                         nli.score,
-                        result["snippet"],
+                        premise,
                         claim
                     )
                     nli_scores.append(scores)
 
-                    # Determine verdict for this source
                     best_verdict = max(scores, key=scores.get)
                     sources.append(Source(
                         title=result["title"],
